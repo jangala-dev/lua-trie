@@ -38,7 +38,7 @@ function Trie:insert(key, value)
     node.value = value
 end
 
---- Method to retrieve the value associated with a key from the Trie. It accepts wildcards but as literals. This function will only ever return one value.
+--- Method to retrieve the value associated with an exact key from the Trie. It accepts wildcards but as literals. This function will only ever return one value.
 -- @param key A string representing the key. The string will be split by the separator defined at Trie initialization.
 -- @return Returns the value associated with the key if it exists in the Trie.
 -- @function Trie:retrieve
@@ -60,30 +60,37 @@ function Trie:match(key)
     local matches = {}
     key = split(key, self.separator)
     local function _match(node, i, keypart)
-        if key[i] == self.singleWildcard or key[i] == self.multiWildcard then
-            error("Wildcards are not permitted in match strings.")
-        end
-        if node[key[i]] then
-            if i == #key and node[key[i]].value then
-                table.insert(matches, node[key[i]].value)
+        local keyNode = node[key[i]]
+        local singleWildcardNode = node[self.singleWildcard]
+        local multiWildcardNode = node[self.multiWildcard]
+
+        if keyNode then
+            if i == #key and keyNode.value then
+                table.insert(matches, keyNode.value)
             end
-            _match(node[key[i]], i + 1, keypart..key[i]..self.separator)
+            _match(keyNode, i + 1, keypart..key[i]..self.separator)
         end
-        if node[self.singleWildcard] then
-            if i == #key and node[self.singleWildcard].value then
-                table.insert(matches, node[self.singleWildcard].value)
+
+        if singleWildcardNode then
+            if i == #key and singleWildcardNode.value then
+                table.insert(matches, singleWildcardNode.value)
             end
-            _match(node[self.singleWildcard], i + 1, keypart..self.singleWildcard..self.separator)
+            _match(singleWildcardNode, i + 1, keypart..self.singleWildcard..self.separator)
         end
-        if node[self.multiWildcard] then
-            table.insert(matches, node[self.multiWildcard].value)
+
+        if multiWildcardNode then
+            table.insert(matches, multiWildcardNode.value)
         end
     end
     _match(self.root, 1, "")
     return matches
 end
 
---- Method to delete the value associated with a key from the Trie. If it's a leaf node, it will also delete all parent empty nodes.
+--- Method to delete the value associated with a key from the Trie.
+-- If the key includes a wildcard, the wildcard is treated as a literal part of the key (not as a wildcard).
+-- After deletion of the value, if the node becomes a leaf node (no child nodes), 
+-- it will be deleted along with its parent nodes up to the node which has multiple child nodes or is a root node.
+-- Note: This function treats the wildcard characters as literals and they should match exactly in the key for deletion.
 -- @param key A string representing the key. The string will be split by the separator defined at Trie initialization.
 -- @function Trie:delete
 function Trie:delete(key)
