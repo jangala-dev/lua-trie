@@ -38,7 +38,7 @@ function Trie:insert(key, value)
     node.value = value
 end
 
---- Method to retrieve the value associated with a key from the Trie. It accepts wildcards.
+--- Method to retrieve the value associated with a key from the Trie. It accepts wildcards but as literals. This function will only ever return one value.
 -- @param key A string representing the key. The string will be split by the separator defined at Trie initialization.
 -- @return Returns the value associated with the key if it exists in the Trie.
 -- @function Trie:retrieve
@@ -60,13 +60,20 @@ function Trie:match(key)
     local matches = {}
     key = split(key, self.separator)
     local function _match(node, i, keypart)
-        for part, child in pairs(node) do
-            if part == key[i] or part == self.singleWildcard then
-                if i == #key and child.value then
-                    table.insert(matches, child.value)
-                end
-                _match(child, i + 1, keypart..part..self.separator)
+        if key[i] == self.singleWildcard or key[i] == self.multiWildcard then
+            error("Wildcards are not permitted in match strings.")
+        end
+        if node[key[i]] then
+            if i == #key and node[key[i]].value then
+                table.insert(matches, node[key[i]].value)
             end
+            _match(node[key[i]], i + 1, keypart..key[i]..self.separator)
+        end
+        if node[self.singleWildcard] then
+            if i == #key and node[self.singleWildcard].value then
+                table.insert(matches, node[self.singleWildcard].value)
+            end
+            _match(node[self.singleWildcard], i + 1, keypart..self.singleWildcard..self.separator)
         end
         if node[self.multiWildcard] then
             table.insert(matches, node[self.multiWildcard].value)
