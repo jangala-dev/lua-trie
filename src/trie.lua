@@ -57,6 +57,7 @@ end
 -- @return Returns a table of all values that match the key.
 -- @function Trie:match
 function Trie:match(key)
+    local num_matches = 0
     local matches = {}
     key = split(key, self.separator)
     local function _match(node, i, keypart)
@@ -66,24 +67,27 @@ function Trie:match(key)
 
         if keyNode then
             if i == #key and keyNode.value then
-                table.insert(matches, keyNode.value)
+                num_matches = num_matches + 1
+                matches[keypart..key[i]] = keyNode.value
             end
             _match(keyNode, i + 1, keypart..key[i]..self.separator)
         end
 
         if singleWildcardNode then
             if i == #key and singleWildcardNode.value then
-                table.insert(matches, singleWildcardNode.value)
+                num_matches = num_matches + 1
+                matches[keypart..self.singleWildcard] = singleWildcardNode.value
             end
             _match(singleWildcardNode, i + 1, keypart..self.singleWildcard..self.separator)
         end
 
         if multiWildcardNode then
-            table.insert(matches, multiWildcardNode.value)
+            num_matches = num_matches + 1
+            matches[keypart..self.multiWildcard] = multiWildcardNode.value
         end
     end
     _match(self.root, 1, "")
-    return matches
+    return matches, num_matches
 end
 
 --- Method to delete the value associated with a key from the Trie.
