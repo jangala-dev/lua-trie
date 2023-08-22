@@ -5,15 +5,15 @@ local Trie = {}
 Trie.__index = Trie
 
 --- Create a new Trie instance.
--- @tparam string s_wild Single-level wildcard.
--- @tparam string m_wild Multi-level wildcard. It can only be placed at the end of a key.
+-- @tparam string single_wild Single-level wildcard.
+-- @tparam string multi_wild Multi-level wildcard. It can only be placed at the end of a key.
 -- @tparam[opt=""] string separator The separator used to split the key. Default is characterwise splitting.
 -- @treturn table Returns a new Trie instance.
-local function new(s_wild, m_wild, separator)
+local function new(single_wild, multi_wild, separator)
     local trie = setmetatable({
         root = {children = {}},
-        s_wild = s_wild,
-        m_wild = m_wild,
+        single_wild = single_wild,
+        multi_wild = multi_wild,
         separator = separator or ""
     }, Trie)
     return trie
@@ -37,8 +37,8 @@ function Trie:insert(key, value)
     local node = self.root
     key = split(key, self.separator)
     for i, part in ipairs(key) do
-        if part == self.m_wild and i ~= #key then
-            return false, "error: multi-level wildcard '"..self.m_wild.."' permitted only at the end of the key."
+        if part == self.multi_wild and i ~= #key then
+            return false, "error: multi-level wildcard '"..self.multi_wild.."' permitted only at the end of the key."
         end
         node.children[part] = node.children[part] or {children = {}}
         node = node.children[part]
@@ -79,7 +79,7 @@ local function collect_all(startNode, startKeypart, matches, separator)
 end
 
 --- Matches the given key against the Trie and returns all matches.
--- The function supports single and multi-level wildcards.
+-- The function supports single and multi-level wildcards in the key.
 -- @tparam string key The key to match.
 -- @treturn table A table containing all matching key-value pairs.
 function Trie:match(key)
@@ -91,13 +91,13 @@ function Trie:match(key)
     while #stack > 0 do
         local current = table.remove(stack)
         local node, i, keypart = current.node, current.i, current.keypart
-        local keyNode = node.children[key[i]]
-        local s_wildNode = node.children[self.s_wild]
-        local m_wildNode = node.children[self.m_wild]
+        local key_node = node.children[key[i]]
+        local single_wild_node = node.children[self.single_wild]
+        local multi_wild_node = node.children[self.multi_wild]
 
-        if key[i] == self.m_wild then
+        if key[i] == self.multi_wild then
             collect_all(node, keypart, matches, self.separator)
-        elseif key[i] == self.s_wild then
+        elseif key[i] == self.single_wild then
             for k, child_node in pairs(node.children) do
                 if i == #key and child_node.value then
                     table.insert(matches, {['key']=keypart..k, ['value']=child_node.value})
@@ -106,22 +106,22 @@ function Trie:match(key)
                 end
             end
         else
-            if keyNode then
-                if i == #key and keyNode.value then
-                    table.insert(matches, {['key']=keypart..key[i], ['value']=keyNode.value})
+            if key_node then
+                if i == #key and key_node.value then
+                    table.insert(matches, {['key']=keypart..key[i], ['value']=key_node.value})
                 end
-                table.insert(stack, {node=keyNode, i=i+1, keypart=keypart..key[i]..self.separator})
+                table.insert(stack, {node=key_node, i=i+1, keypart=keypart..key[i]..self.separator})
             end
 
-            if s_wildNode then
-                if i == #key and s_wildNode.value then
-                    table.insert(matches, {['key']=keypart..self.s_wild, ['value']=s_wildNode.value})
+            if single_wild_node then
+                if i == #key and single_wild_node.value then
+                    table.insert(matches, {['key']=keypart..self.single_wild, ['value']=single_wild_node.value})
                 end
-                table.insert(stack, {node=s_wildNode, i=i+1, keypart=keypart..self.s_wild..self.separator})
+                table.insert(stack, {node=single_wild_node, i=i+1, keypart=keypart..self.single_wild..self.separator})
             end
 
-            if m_wildNode then
-                table.insert(matches, {['key']=keypart..self.m_wild, ['value']=m_wildNode.value})
+            if multi_wild_node then
+                table.insert(matches, {['key']=keypart..self.multi_wild, ['value']=multi_wild_node.value})
             end
         end
 
