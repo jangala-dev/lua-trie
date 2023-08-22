@@ -95,9 +95,9 @@ function Trie:match(key)
         local single_wild_node = node.children[self.single_wild]
         local multi_wild_node = node.children[self.multi_wild]
 
-        if key[i] == self.multi_wild then
+        if self.multi_wild and key[i] == self.multi_wild then
             collect_all(node, keypart, matches, self.separator)
-        elseif key[i] == self.single_wild then
+        elseif self.single_wild and key[i] == self.single_wild then
             for k, child_node in pairs(node.children) do
                 if i == #key and child_node.value then
                     table.insert(matches, {['key']=keypart..k, ['value']=child_node.value})
