@@ -1,6 +1,6 @@
 # Trie Library README
 
-This library provides a Trie implementation with support for single-level (`+`) and multi-level (`#`) wildcards. Tries are commonly used for looking up keys efficiently and can be extended to support wildcard queries. The library is designed to be flexible with the delimiter used to split the keys.
+This library provides a Trie implementation with support for single-level (`+`) and multi-level (`#`) wildcards. Wildcards are permitted in both Trie entries (with `insert()`) and in Trie searches (with `match()`). Tries are commonly used for looking up keys efficiently and can be extended to support wildcard queries. The library is designed to be flexible with the delimiter used to split the keys.
 
 ## Key Features:
 - **Insertion** of key-value pairs into the Trie.
@@ -10,9 +10,9 @@ This library provides a Trie implementation with support for single-level (`+`) 
   
 ## Usage:
 
-### 1. Initialization:
+### 1. Initialisation:
 ```lua
-local Trie = require "trie-alt"  -- Path to the Trie module
+local Trie = require "trie"  -- Path to the Trie module
 
 -- Use wildcard characters '+' and '#'
 local trie = Trie.new("+", "#")
