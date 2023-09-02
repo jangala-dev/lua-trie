@@ -82,9 +82,9 @@ local function test_delete_leaf_node()
     trie:insert("abcd", "value1")
     trie:insert("abcde", "value2")
 
-    assert(trie:delete("abcd"), "Failed to delete leaf node")
-    assert(trie:retrieve("abcd") == nil, "Failed to delete value of leaf node")
-    assert(trie:retrieve("abcde") == "value2", "Affected other keys while deleting leaf node")
+    assert(trie:delete("abcde"), "Failed to delete leaf node")
+    assert(trie:retrieve("abcde") == nil, "Failed to delete value of leaf node")
+    assert(trie:retrieve("abcd") == "value1", "Affected other keys while deleting leaf node")
 end
 
 local function test_delete_internal_node()
@@ -92,9 +92,9 @@ local function test_delete_internal_node()
     trie:insert("abcd", "value1")
     trie:insert("abcde", "value2")
 
-    assert(trie:delete("abcde"), "Failed to delete internal node")
-    assert(trie:retrieve("abcde") == nil, "Failed to delete value of internal node")
-    assert(trie:retrieve("abcd") == "value1", "Affected other keys while deleting internal node")
+    assert(trie:delete("abcd"), "Failed to delete internal node")
+    assert(trie:retrieve("abcd") == nil, "Failed to delete value of internal node")
+    assert(trie:retrieve("abcde") == "value2", "Affected other keys while deleting internal node")
 end
 
 local function test_delete_with_wildcards()
