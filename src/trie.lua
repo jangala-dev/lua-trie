@@ -38,13 +38,13 @@ function Trie:insert(key, value)
     key = split(key, self.separator)
     for i, part in ipairs(key) do
         if part == self.multi_wild and i ~= #key then
-            return false, "error: multi-level wildcard '"..self.multi_wild.."' permitted only at the end of the key."
+            return false, "error: multi-level wildcard '"..self.multi_wild.."' permitted only at the end of insert key."
         end
         node.children[part] = node.children[part] or {children = {}}
         node = node.children[part]
     end
     node.value = value
-    return true
+    return true, nil
 end
 
 --- Retrieve a value based on the given key from the Trie.
@@ -54,10 +54,13 @@ function Trie:retrieve(key)
     local node = self.root
     key = split(key, self.separator)
     for i, part in ipairs(key) do
+        if part == self.multi_wild and i ~= #key then
+            return false, "error: multi-level wildcard '"..self.multi_wild.."' permitted only at the end of retrieval key."
+        end
         if not node.children[part] then return nil end
         node = node.children[part]
     end
-    return node.value
+    return node.value, nil
 end
 
 local function collect_all(startNode, startKeypart, matches, separator)
