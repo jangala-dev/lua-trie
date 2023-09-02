@@ -85,46 +85,45 @@ end
 function Trie:match(key)
     local matches = {}
 
-    key = split(key, self.separator)
+    local parts = split(key, self.separator)
     local stack = {{node=self.root, i=1, keypart=""}}
 
     while #stack > 0 do
         local current = table.remove(stack)
         local node, i, keypart = current.node, current.i, current.keypart
-        local key_node = node.children[key[i]]
-        local single_wild_node = node.children[self.single_wild]
-        local multi_wild_node = node.children[self.multi_wild]
-
-        if self.multi_wild and key[i] == self.multi_wild then
+        
+        if self.multi_wild and parts[i] == self.multi_wild then
             collect_all(node, keypart, matches, self.separator)
-        elseif self.single_wild and key[i] == self.single_wild then
+        elseif self.single_wild and parts[i] == self.single_wild then
             for k, child_node in pairs(node.children) do
-                if i == #key and child_node.value then
+                if i == #parts and child_node.value then
                     table.insert(matches, {['key']=keypart..k, ['value']=child_node.value})
-                elseif i < #key then
+                elseif i < #parts then
                     table.insert(stack, {node=child_node, i=i+1, keypart=keypart..k..self.separator})
                 end
             end
         else
+            local key_node = node.children[parts[i]]
             if key_node then
-                if i == #key and key_node.value then
-                    table.insert(matches, {['key']=keypart..key[i], ['value']=key_node.value})
+                if i == #parts and key_node.value then
+                    table.insert(matches, {['key']=keypart..parts[i], ['value']=key_node.value})
+                else
+                    table.insert(stack, {node=key_node, i=i+1, keypart=keypart..parts[i]..self.separator})
                 end
-                table.insert(stack, {node=key_node, i=i+1, keypart=keypart..key[i]..self.separator})
             end
-
+            local single_wild_node = node.children[self.single_wild]
             if single_wild_node then
-                if i == #key and single_wild_node.value then
+                if i == #parts and single_wild_node.value then
                     table.insert(matches, {['key']=keypart..self.single_wild, ['value']=single_wild_node.value})
+                else
+                    table.insert(stack, {node=single_wild_node, i=i+1, keypart=keypart..self.single_wild..self.separator})
                 end
-                table.insert(stack, {node=single_wild_node, i=i+1, keypart=keypart..self.single_wild..self.separator})
             end
-
+            local multi_wild_node = node.children[self.multi_wild]
             if multi_wild_node then
                 table.insert(matches, {['key']=keypart..self.multi_wild, ['value']=multi_wild_node.value})
             end
         end
-
     end
 
     return matches
