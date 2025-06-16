@@ -1,21 +1,14 @@
 package.path = "../src/?.lua;" .. package.path
 
 local Trie = require "trie"
-local posix = require "posix"
-
--- Function to get high-resolution timestamp
-local function get_time()
-    local spec = posix.clock_gettime("CLOCK_REALTIME")
-    return spec.sec + spec.nsec*1e-9
-end
 
 local N = 100000  -- Number of entries for benchmarking
 
--- Function to generate random string
-local function random_string(length)
-    local res = ""
+-- Function to generate random array key
+local function random_key(length)
+    local res = {}
     for i = 1, length do
-        res = res .. string.char(math.random(97, 122))
+        res[i] = string.char(math.random(97, 122))
     end
     return res
 end
@@ -24,7 +17,7 @@ end
 local function generate_dataset()
     local dataset = {}
     for i = 1, N do
-        table.insert(dataset, random_string(5))
+        table.insert(dataset, random_key(5))
     end
     return dataset
 end
