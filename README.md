@@ -1,167 +1,192 @@
 # Trie
 
-This library provides a highly flexible Trie (prefix tree) implementation with support for both single-level and multi-level wildcards. The Trie can store key–value pairs and is designed to work with various key formats. Keys can be simple arrays (tables) of tokens, strings that are split by a delimiter, or even fully custom types when you provide your own tokeniser/detokeniser functions.
+A small Trie (prefix tree) for token sequences, supporting optional wildcard matching. The implementation is designed for use-cases such as topic routing and retained-message lookup, where wildcard semantics differ depending on whether wildcards are permitted in stored keys or in queries.
 
-Wildcards in search prefixes follow these semantics:
+Tokens are provided as a **dense array** (a Lua table with integer keys `1..n` and no `nil` holes). Each token must be a **string** or **number**.
 
-- **Single-level Wildcard (`+`):** Matches any token at that level.
-- **Multi-level Wildcard (`#`):** Matches all key–value pairs at that level and below. (It must appear only as the final token in a search pattern.)
+Iteration order is not defined: child traversal uses `pairs()`.
 
-When inserting keys, any wildcard characters are treated as literal tokens.
+## Concepts
 
+### Tokens
 
-## Key Features
-
-- **Insertion:**  
-  Insert key–value pairs into the Trie. The key can be provided as a table (array) of tokens, a string (which will be split using a specified delimiter), or a custom type if you supply your own tokeniser.
-  
-- **Retrieval:**  
-  Retrieve a value using an exact key match (wildcards in stored keys are taken literally).
-  
-- **Deletion:**  
-  Remove keys from the Trie. After deletion, the Trie prunes any nodes that become unnecessary.
-  
-- **Wildcard Matching:**  
-  Perform searches using wildcards:
-  - Use `+` to match a single token at a given level.
-  - Use `#` to match zero or more tokens (only allowed as the last token) and traverse entire subtrees.
-  
-- **Iteration:**  
-  Several iterator functions allow you to traverse matching keys or values:
-  - `prefix_iter`, `prefix_keys_iter`, and `prefix_values_iter` yield entries in the entire subtree under a matching prefix.
-  - `match_iter`, `match_keys_iter`, and `match_values_iter` return only exact matches according to the wildcard pattern.
-
-- **Customisability:**  
-  In addition to built-in support for string or table keys, you can define your own tokeniser/detokeniser functions via `new_custom`.
-
-
-## Usage
-
-### 1. Initialization
-
-Require the module and create a Trie instance using one of the available constructors:
-
-- **Using Table Keys:**  
-  Use this if you want to work directly with arrays of tokens.
-
-  ```lua
-  local Trie = require "trie"  -- Adjust the module path as needed
-  local trie = Trie.new("+", "#")
-  ```
-
-- **Using String Keys with a Custom Delimiter:**  
-  When working with strings, use the `new_string` constructor. For example, to split keys on the forward slash (`/`):
-
-  ```lua
-  local Trie = require "trie"
-  local custom_separator_trie = Trie.new_string("+", "#", "/")
-  ```
-
-- **Using Custom Tokenisation:**  
-  If you require a different format or complex key structures, provide your own tokeniser and detokeniser:
-
-  ```lua
-  local tokeniser = function(key)
-      -- Custom tokenisation logic here
-      return { key }  -- Example: treat the entire key as one token
-  end
-
-  local detokeniser = function(tokens)
-      -- Custom detokenisation logic here
-      return tokens[1]  -- Example: return the first token
-  end
-
-  local custom_trie = Trie.new_custom("+", "#", tokeniser, detokeniser)
-  ```
-
-### 2. Insertion
-
-Insert key–value pairs into the Trie. Keys may be strings, tables, or custom types (depending on your Trie instance).
+Keys and queries are arrays of tokens:
 
 ```lua
-trie:insert({"a","b", "c", "d"}, "value1")
-custom_separator_trie:insert("a/b/c/d", "value3")
-```
+{"a", "b", "c"}
+{10, 20, 30}
+````
 
-Wildcards may be used in inserted keys; however, note that when storing keys, wildcards are treated literally. Acceptable usage includes:
+Empty token sequences (`{}`) are permitted. An empty key stores a value at the root node.
 
-```lua
-trie:insert({"a", "b", "+", "f", "value2"})  -- '+' is part of the key token
-trie:insert({"a", "b", "+", "value3"})   -- also acceptable
-```
+### Wildcards
 
-Incorrect usage (eg. placing a multi-level wildcard in the middle of a key) will result in an error:
+Two wildcard symbols are supported when enabled:
 
-```lua
-local status, err = trie:insert({"a", "#", "b", "value5"})  -- Error: multi-level wildcard can only appear at the end
-```
+* **Single-level wildcard** (default `+`): matches exactly one token at that level.
+* **Multi-level wildcard** (default `#`): matches the remainder of the path, including zero tokens. It may appear **only as the final token**.
 
-### 3. Retrieval
+Wildcard symbols are configurable per instance and may be strings or numbers, but must be different from each other.
 
-Retrieve a value from the Trie using an exact key match:
+### Literal escape
+
+If you need to treat a token that equals the configured wildcard symbol as a literal token (rather than a wildcard), wrap it with `Trie.literal(...)`:
 
 ```lua
-local value = trie:retrieve({"a", "b", "c", "d"})  -- Returns "value1" if the key exists
+Trie.literal("+")
+Trie.literal("#")
 ```
 
-### 4. Matching
+This works for both stored keys and queries, depending on the instance mode (see below).
 
-Use wildcard patterns to match multiple keys or values.
+## Modes
 
-- **Wildcard Matching:**  
-  When calling `match()`, the wildcards in the search pattern are interpreted according to the matching rules:
-  
-  ```lua
-  local matches = trie:match("a", "b", "+", "f")  -- Matches entries like {"a", "b", "c", f"}, {"a", "b", "d", "f"}, etc.
-  ```
-  
-- **Using Custom Separators:**  
-  For Tries created with `new_string` and a custom delimiter:
+The module provides three explicit modes.
 
-  ```lua
-  local matches = custom_separator_trie:match("a/b/+/#")
-  -- This could match keys like "a/b/c/d" or "a/b/d/e/g/h" depending on the inserted entries.
-  ```
+### 1) `pubsub` mode (stored patterns, literal queries)
 
-- **Iterators:**  
-  The module provides various iterators:
-  - `prefix_iter(pattern)` – yields key–value pairs under the prefix.
-  - `prefix_keys_iter(pattern)` – yields only the keys.
-  - `prefix_values_iter(pattern)` – yields only the values.
-  - `match_iter(pattern)` – yields only the exact matches (if the end node holds a value).
-  - `match_keys_iter(pattern)` and `match_values_iter(pattern)` – similar but yield only keys or values respectively.
+* Stored keys may use wildcard symbols and they are interpreted as wildcards.
+* Queries are treated literally (no wildcard interpretation).
 
-### 5. Deletion
+This matches publish/subscribe topic routing.
 
-Remove a key from the Trie. If the key is found, the corresponding value is cleared and unnecessary nodes are pruned:
+### 2) `retained` mode (literal keys, wildcard queries)
+
+* Stored keys are always literal.
+* Queries may use wildcard symbols and they are interpreted as wildcards.
+
+This matches retained-message lookup and similar filtering.
+
+### 3) `literal` mode (exact match only)
+
+* No wildcard semantics.
+* Stored keys and queries are treated literally.
+
+## API
+
+### Constructors
 
 ```lua
-local success, err = trie:delete({"a", "b", "c", "d"})
-if success then
-    print("Key deleted.")
-else
-    print("Key not found or error:", err)
-end
+local Trie = require "trie"
+
+local t1 = Trie.new_pubsub(single_sym, multi_sym)    -- defaults: "+", "#"
+local t2 = Trie.new_retained(single_sym, multi_sym)  -- defaults: "+", "#"
+local t3 = Trie.new_literal()
 ```
 
-### 6. Edge Cases
+`single_sym` and `multi_sym`, if provided, must be strings or numbers and must be different.
 
-This library has been tested with various edge cases including empty keys, very long keys, and keys with special characters. It ensures that token validation is performed so that only strings or numbers are used as tokens, and that wildcards are used correctly.
+### Methods
 
+All instances provide the same methods.
 
-## Wildcard Details
+#### `insert(key_tokens, value) -> true`
 
-- **Single-Level Wildcard (`+`):**  
-  In search patterns, this wildcard matches any single token. For example, the pattern `{"a", "b", "+", "c"}` will match keys like `{"a", "b", "c", "c"}` or `{"a", "b", "e", "c"`, where the token in the wildcard position can be any valid token.
+Insert or replace the value at `key_tokens`.
 
-- **Multi-Level Wildcard (`#`):**  
-  This wildcard matches zero or more tokens at the end of a key. For instance, in a string-keyed table, `"ab#"` will match `"abc"`, `"abcd"`, `"abcdefgh"`, etc. Note that in search patterns, `#` must be the final token.
+* `value` must not be `nil`.
+* `key_tokens` must be a dense array of string/number tokens.
+* In `pubsub`, wildcard symbols in `key_tokens` have wildcard meaning unless wrapped with `Trie.literal(...)`.
+* In `retained` and `literal`, wildcard symbols are treated as ordinary tokens.
 
-*Remember:*  
-- When inserting keys, wildcards are stored as literal characters.  
-- When searching, wildcards have their special meaning, allowing for flexible queries.
+#### `retrieve(key_tokens) -> value|nil`
 
+Exact lookup. Returns `nil` if the key does not exist.
 
-## LDoc Annotations
+Note: in `pubsub`, wildcard symbols in `key_tokens` are compiled as wildcards. If you intend a literal `+` or `#` in the key, wrap that token with `Trie.literal(...)`.
 
-The source code is annotated with LDoc tags such as `@tparam` and `@treturn` to help generate detailed documentation. For example, each function documents its parameters and return types, ensuring that users understand how to work with the module.
+#### `delete(key_tokens) -> boolean`
+
+Deletes the exact key and prunes now-unused nodes. Returns `true` if a value was removed, otherwise `false`.
+
+The same token rules apply as for `retrieve`.
+
+#### `each(query_tokens, visit_value) -> true`
+
+Calls `visit_value(value)` for each matching value.
+
+* `visit_value` must be a function.
+* Matching behaviour depends on mode:
+
+  * `pubsub`: `query_tokens` are literal; stored wildcard patterns may match them.
+  * `retained`: stored keys are literal; `query_tokens` may include wildcards.
+  * `literal`: exact match only (at most one call to `visit_value`).
+
+No ordering guarantee is provided.
+
+## Examples
+
+### Pub/sub routing (stored patterns)
+
+```lua
+local Trie = require "trie"
+local topics = Trie.new_pubsub("+", "#")
+
+topics:insert({"a", "+", "c"}, "single")
+topics:insert({"a", "#"}, "multi")
+topics:insert({"a", Trie.literal("+"), "c"}, "literal-plus")
+
+local out = {}
+topics:each({"a", "b", "c"}, function(v) out[#out+1] = v end)
+-- out contains: "single", "multi"
+
+out = {}
+topics:each({"a", "+", "c"}, function(v) out[#out+1] = v end)
+-- out contains: "single", "multi", "literal-plus"
+```
+
+### Retained lookup (wildcard queries)
+
+```lua
+local Trie = require "trie"
+local r = Trie.new_retained("+", "#")
+
+r:insert({"a"}, "v0")
+r:insert({"a", "b", "c"}, "v1")
+r:insert({"a", "+", "c"}, "v2")  -- literal '+' in stored key
+
+local out = {}
+r:each({"a", "+", "c"}, function(v) out[#out+1] = v end)
+-- out contains: "v1", "v2"
+
+out = {}
+r:each({"a", Trie.literal("+"), "c"}, function(v) out[#out+1] = v end)
+-- out contains: "v2"
+
+out = {}
+r:each({"a", "#"}, function(v) out[#out+1] = v end)
+-- out contains: "v0", "v1", "v2"
+```
+
+### Literal mode (exact match)
+
+```lua
+local Trie = require "trie"
+local t = Trie.new_literal()
+
+t:insert({"a", "+", "c"}, "v")
+assert(t:retrieve({"a", "+", "c"}) == "v")
+
+local seen = 0
+t:each({"a", "+", "c"}, function(_) seen = seen + 1 end)
+assert(seen == 1)
+```
+
+## Validation and errors
+
+The implementation validates inputs and raises errors for:
+
+* non-table token inputs
+* token arrays that are not dense `1..n`
+* token parts that are not strings or numbers
+* `nil` values in `insert`
+* use of multi-level wildcard (`#` by default) anywhere other than the final token in contexts where wildcards are enabled:
+
+  * in stored keys for `pubsub`
+  * in queries for `retained`
+
+## Notes
+
+* The trie stores values only at complete keys; it does not return intermediate nodes unless a value was stored there.
+* Iteration order is undefined.
+* `each` is callback-based and may visit zero, one, or many values depending on mode and query.
