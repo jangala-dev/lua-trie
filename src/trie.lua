@@ -49,13 +49,17 @@ end
 --------------------------------------------------------------------------------
 
 local function Node()
-    return { c = {}, has = false, v = nil }
+    -- c   : children map
+    -- has : whether this node stores a value
+    -- v   : stored value
+    -- k   : stored key tokens (presentation form, including '+'/'#' where applicable)
+    return { c = {}, has = false, v = nil, k = nil }
 end
 
-local function insert(root, tokens, value)
+local function insert(root, tokens_compiled, value, key_tokens)
     local node = root
-    for i = 1, #tokens do
-        local t = tokens[i]
+    for i = 1, #tokens_compiled do
+        local t = tokens_compiled[i]
         local child = node.c[t]
         if not child then
             child = Node()
@@ -63,24 +67,24 @@ local function insert(root, tokens, value)
         end
         node = child
     end
-    node.has, node.v = true, value
+    node.has, node.v, node.k = true, value, key_tokens
     return true
 end
 
-local function get(root, tokens)
+local function get_node(root, tokens_compiled)
     local node = root
-    for i = 1, #tokens do
-        node = node.c[tokens[i]]
-        if not node then return nil, false end
+    for i = 1, #tokens_compiled do
+        node = node.c[tokens_compiled[i]]
+        if not node then return nil end
     end
-    return node.v, node.has
+    return node
 end
 
-local function remove(root, tokens)
+local function remove(root, tokens_compiled)
     local node, stack = root, {}
 
-    for i = 1, #tokens do
-        local t = tokens[i]
+    for i = 1, #tokens_compiled do
+        local t = tokens_compiled[i]
         local child = node.c[t]
         if not child then return false end
         stack[#stack + 1] = { node, t }
@@ -88,7 +92,7 @@ local function remove(root, tokens)
     end
 
     if not node.has then return false end
-    node.has, node.v = false, nil
+    node.has, node.v, node.k = false, nil, nil
 
     for i = #stack, 1, -1 do
         local parent, tok = stack[i][1], stack[i][2]
@@ -105,7 +109,9 @@ local function visit_all(start_node, visit)
     while #stack > 0 do
         local node = stack[#stack]
         stack[#stack] = nil
-        if node.has then visit(node.v) end
+        if node.has then
+            visit(node.k, node.v)
+        end
         for _, child in pairs(node.c) do
             stack[#stack + 1] = child
         end
@@ -116,9 +122,13 @@ end
 -- Token compilation
 --------------------------------------------------------------------------------
 
+-- Returns:
+--   compiled : tokens with SW/MW sentinels substituted where allowed
+--   shown    : tokens in "presentation" form (keeps '+'/'#' symbols)
 local function compile(cfg, tokens, allow_wild, errlvl)
     local n = array_len(tokens, errlvl)
-    local out = {}
+    local compiled = {}
+    local shown    = {}
 
     for i = 1, n do
         local tok = tokens[i]
@@ -133,21 +143,28 @@ local function compile(cfg, tokens, allow_wild, errlvl)
             end
         end
 
+        -- Default: shown == tok as provided (post literal unwrap).
+        shown[i] = tok
+
         if allow_wild and not was_lit then
             if tok == cfg.single then
-                tok = cfg.SW
+                compiled[i] = cfg.SW
+                -- shown[i] stays as cfg.single (e.g. "+")
             elseif tok == cfg.multi then
                 if i ~= n then
                     error("multi wildcard must be last", errlvl)
                 end
-                tok = cfg.MW
+                compiled[i] = cfg.MW
+                -- shown[i] stays as cfg.multi (e.g. "#")
+            else
+                compiled[i] = tok
             end
+        else
+            compiled[i] = tok
         end
-
-        out[i] = tok
     end
 
-    return out
+    return compiled, shown
 end
 
 --------------------------------------------------------------------------------
@@ -190,7 +207,7 @@ local function match_stored(root, cfg, q, visit)
     dfs_walk(
         root, q,
         function(node)
-            if node.has then visit(node.v) end
+            if node.has then visit(node.k, node.v) end
             local mwc = node.c[MW]
             if mwc then visit_all(mwc, visit) end
         end,
@@ -213,7 +230,7 @@ local function match_query(root, cfg, q, visit)
     dfs_walk(
         root, q,
         function(node)
-            if node.has then visit(node.v) end
+            if node.has then visit(node.k, node.v) end
         end,
         function(node, i, tok, push)
             if tok == MW then
@@ -267,18 +284,22 @@ local function new(mode, single, multi)
 
     function api:insert(key, value)
         if value == nil then error("value required", 2) end
-        return insert(root, compile(cfg, key, spec.key_wild, 4), value)
+        local compiled, shown = compile(cfg, key, spec.key_wild, 4)
+        return insert(root, compiled, value, shown)
     end
 
     function api:retrieve(key)
-        local v, ok = get(root, compile(cfg, key, spec.key_wild, 4))
-        return ok and v or nil
+        local compiled = compile(cfg, key, spec.key_wild, 4)
+        local node = get_node(root, compiled)
+        return (node and node.has) and node.v or nil
     end
 
     function api:delete(key)
-        return remove(root, compile(cfg, key, spec.key_wild, 4))
+        local compiled = compile(cfg, key, spec.key_wild, 4)
+        return remove(root, compiled)
     end
 
+    -- visit(key_tokens, value)
     function api:each(query, visit)
         if type(visit) ~= "function" then error("visit must be a function", 2) end
         local q = compile(cfg, query, spec.query_wild, 4)
@@ -286,8 +307,10 @@ local function new(mode, single, multi)
         if matcher then
             matcher(root, cfg, q, visit)
         else
-            local v, ok = get(root, q)
-            if ok then visit(v) end
+            local node = get_node(root, q)
+            if node and node.has then
+                visit(node.k, node.v)
+            end
         end
 
         return true

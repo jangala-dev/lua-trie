@@ -10,7 +10,7 @@ end
 
 local function collect_each(t, query)
     local out = {}
-    t:each(query, function(v) out[#out + 1] = v end)
+    t:each(query, function(_, v) out[#out + 1] = v end)
     return out
 end
 

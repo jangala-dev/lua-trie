@@ -101,16 +101,16 @@ Deletes the exact key and prunes now-unused nodes. Returns `true` if a value was
 
 The same token rules apply as for `retrieve`.
 
-#### `each(query_tokens, visit_value) -> true`
+#### `each(query_tokens, visit_all) -> true`
 
-Calls `visit_value(value)` for each matching value.
+Calls `visit_all(key, value)` for each matching (key, value).
 
-* `visit_value` must be a function.
+* `visit_all` must be a function.
 * Matching behaviour depends on mode:
 
   * `pubsub`: `query_tokens` are literal; stored wildcard patterns may match them.
   * `retained`: stored keys are literal; `query_tokens` may include wildcards.
-  * `literal`: exact match only (at most one call to `visit_value`).
+  * `literal`: exact match only (at most one call to `visit_all`).
 
 No ordering guarantee is provided.
 
@@ -127,11 +127,11 @@ topics:insert({"a", "#"}, "multi")
 topics:insert({"a", Trie.literal("+"), "c"}, "literal-plus")
 
 local out = {}
-topics:each({"a", "b", "c"}, function(v) out[#out+1] = v end)
+topics:each({"a", "b", "c"}, function(_, v) out[#out+1] = v end)
 -- out contains: "single", "multi"
 
 out = {}
-topics:each({"a", "+", "c"}, function(v) out[#out+1] = v end)
+topics:each({"a", "+", "c"}, function(_, v) out[#out+1] = v end)
 -- out contains: "single", "multi", "literal-plus"
 ```
 
@@ -146,15 +146,15 @@ r:insert({"a", "b", "c"}, "v1")
 r:insert({"a", "+", "c"}, "v2")  -- literal '+' in stored key
 
 local out = {}
-r:each({"a", "+", "c"}, function(v) out[#out+1] = v end)
+r:each({"a", "+", "c"}, function(_, v) out[#out+1] = v end)
 -- out contains: "v1", "v2"
 
 out = {}
-r:each({"a", Trie.literal("+"), "c"}, function(v) out[#out+1] = v end)
+r:each({"a", Trie.literal("+"), "c"}, function(_, v) out[#out+1] = v end)
 -- out contains: "v2"
 
 out = {}
-r:each({"a", "#"}, function(v) out[#out+1] = v end)
+r:each({"a", "#"}, function(_, v) out[#out+1] = v end)
 -- out contains: "v0", "v1", "v2"
 ```
 
@@ -168,7 +168,7 @@ t:insert({"a", "+", "c"}, "v")
 assert(t:retrieve({"a", "+", "c"}) == "v")
 
 local seen = 0
-t:each({"a", "+", "c"}, function(_) seen = seen + 1 end)
+t:each({"a", "+", "c"}, function(_, _) seen = seen + 1 end)
 assert(seen == 1)
 ```
 
